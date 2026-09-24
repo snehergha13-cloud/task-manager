@@ -1,0 +1,272 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+  ---------------------------------------------------------------------------
+  Liquid Glass design system
+  ---------------------------------------------------------------------------
+  A CSS approximation of Apple's "Liquid Glass" material (introduced at
+  WWDC 2025 for iOS/iPadOS/macOS 26). Real Liquid Glass is a native,
+  GPU-rendered material with true refraction of the content behind it and
+  motion-reactive specular highlights driven by the device's sensors —
+  that rendering pipeline isn't something CSS/SVG in a browser can fully
+  reproduce. This system reproduces its *visual grammar* as closely as the
+  web platform allows:
+    - translucency via backdrop-filter blur + saturate
+    - a pointer-tracked specular highlight (radial "light catch") instead
+      of a gyroscope-driven one
+    - soft layered shadows + a 1px inner rim light for the glass edge
+    - large, continuous (superellipse-like) corner radii
+    - content always sits on a readable layer, never directly on raw blur
+    - light/dark adapts automatically via prefers-color-scheme, matching
+      Liquid Glass's own light/dark responsiveness
+  ---------------------------------------------------------------------------
+*/
+
+:root {
+  color-scheme: light dark;
+  --glass-x: 50%;
+  --glass-y: 15%;
+
+  --bg-base: #eef1f8;
+  --text-primary: #1d1d1f;
+  --text-secondary: rgba(29, 29, 31, 0.62);
+
+  --accent: #0a84ff;
+  --accent-soft: rgba(10, 132, 255, 0.16);
+  --danger: #ff3b30;
+  --success: #34c759;
+
+  --glass-bg: rgba(255, 255, 255, 0.55);
+  --glass-border: rgba(255, 255, 255, 0.65);
+  --glass-shadow: 0 20px 60px rgba(15, 23, 42, 0.12), 0 2px 8px rgba(15, 23, 42, 0.06);
+  --glass-input-bg: rgba(255, 255, 255, 0.45);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-base: #08090d;
+    --text-primary: #f5f5f7;
+    --text-secondary: rgba(245, 245, 247, 0.64);
+
+    --accent: #409cff;
+    --accent-soft: rgba(64, 156, 255, 0.22);
+
+    --glass-bg: rgba(32, 34, 42, 0.55);
+    --glass-border: rgba(255, 255, 255, 0.12);
+    --glass-shadow: 0 20px 60px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.35);
+    --glass-input-bg: rgba(255, 255, 255, 0.07);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Inter',
+    'Helvetica Neue', Arial, sans-serif;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* ---------------------------- Ambient backdrop --------------------------- */
+/* Soft, slowly drifting color blobs behind the glass, the way a real window
+   needs *something* varied behind it for translucency to read as glass. */
+
+.liquid-backdrop {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  z-index: -1;
+  background: var(--bg-base);
+}
+
+.liquid-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.5;
+  will-change: transform;
+  animation: drift 24s ease-in-out infinite alternate;
+}
+
+.liquid-blob.b1 {
+  width: 42vw;
+  height: 42vw;
+  top: -12%;
+  left: -12%;
+  background: radial-gradient(circle, #6ea8ff, transparent 70%);
+}
+
+.liquid-blob.b2 {
+  width: 46vw;
+  height: 46vw;
+  bottom: -16%;
+  right: -12%;
+  background: radial-gradient(circle, #ff9ed8, transparent 70%);
+  animation-delay: -8s;
+}
+
+.liquid-blob.b3 {
+  width: 34vw;
+  height: 34vw;
+  top: 32%;
+  right: 18%;
+  background: radial-gradient(circle, #b28dff, transparent 70%);
+  animation-delay: -16s;
+}
+
+@keyframes drift {
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+  100% {
+    transform: translate(4%, 6%) scale(1.08);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .liquid-blob {
+    animation: none;
+  }
+}
+
+/* ------------------------------ Glass panel ------------------------------ */
+
+.glass-panel {
+  position: relative;
+  border-radius: 28px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  overflow: hidden;
+  transition:
+    transform 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.35s ease;
+}
+
+.glass-panel:hover {
+  transform: translateY(-2px);
+}
+
+/* The moving highlight that makes the panel feel like it's catching light */
+.glass-specular {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    380px circle at var(--glass-x) var(--glass-y),
+    rgba(255, 255, 255, 0.35),
+    transparent 60%
+  );
+  mix-blend-mode: screen;
+}
+
+@media (prefers-color-scheme: dark) {
+  .glass-specular {
+    background: radial-gradient(
+      380px circle at var(--glass-x) var(--glass-y),
+      rgba(255, 255, 255, 0.14),
+      transparent 60%
+    );
+  }
+}
+
+.glass-content {
+  position: relative;
+  z-index: 1;
+}
+
+/* Pill-shaped glass surface for the nav bar and buttons */
+.glass-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  color: var(--text-primary);
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    background 0.2s ease,
+    opacity 0.2s ease;
+}
+
+.glass-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.glass-button:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
+}
+
+.glass-button:disabled {
+  cursor: not-allowed;
+}
+
+.glass-input {
+  display: block;
+  border-radius: 16px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-input-bg);
+  color: var(--text-primary);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.glass-input::placeholder {
+  color: var(--text-secondary);
+}
+
+.glass-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+
+/* Graceful fallback for browsers without backdrop-filter support */
+@supports not (backdrop-filter: blur(1px)) {
+  .glass-panel,
+  .glass-button,
+  .glass-input {
+    background: rgba(245, 246, 250, 0.94);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .glass-panel,
+    .glass-button,
+    .glass-input {
+      background: rgba(28, 29, 36, 0.94);
+    }
+  }
+}
+
+/* Respect the OS-level "reduce transparency" preference where supported */
+@media (prefers-reduced-transparency: reduce) {
+  .glass-panel,
+  .glass-button,
+  .glass-input {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: var(--bg-base);
+  }
+}
